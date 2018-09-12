@@ -374,8 +374,10 @@ def performDetect(videoPath="test.mp4", taggedVideo="test.avi", thresh=0.25, sto
 
 # Real work started here
 
+print 'Initializing yolo...'
 initYolo(cfg['yolo']['configPath'], cfg['yolo']['weightPath'], cfg['yolo']['metaPath'])
 
+print 'Connecting to mqtt broker...'
 mqttClient = paho.Client('yolo')
 mqttClient.username_pw_set(cfg['mqtt']['user'], cfg['mqtt']['password'])
 mqttClient.connect(cfg['mqtt']['broker'], cfg['mqtt']['port'])
