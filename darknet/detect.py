@@ -467,7 +467,7 @@ while True:
         if len(detections['tags']) != 0:
             mqttTopic = cfg['mqtt']['rootTopic']+'/'+recording['meta']['cameraName'].lower()
             mqttClient.publish(mqttTopic, jsonData)
-            print detections['recordingId'] + ' is published to mqtt ' + mqttTopic + ', tags: ' + detections['tags']
+            print detections['recordingId'] + ' is published to mqtt ' + mqttTopic 
         else:    
             print detections['recordingId'] + ' nothing detected'
         # print(jsonData)
