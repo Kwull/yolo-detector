@@ -463,7 +463,10 @@ while True:
         jsonData = json.dumps(detections, indent=4, sort_keys=True)
 
         if len(detections['tags']) != 0:
-            mqttClient.publish(cfg['mqtt']['rootTopic']+'/'+recording['meta']['cameraName'].lower(), jsonData)
-
-        print(jsonData)
+            mqttTopic = cfg['mqtt']['rootTopic']+'/'+recording['meta']['cameraName'].lower()
+            mqttClient.publish(mqttTopic, jsonData)
+            print detections['recordingId'] + ' is published to mqtt ' + mqttTopic + ', tags: ' + detections['tags']
+        else:    
+            print detections['recordingId'] + ' nothing detected'
+        # print(jsonData)
 
