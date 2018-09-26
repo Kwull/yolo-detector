@@ -397,9 +397,14 @@ while True:
     resp = requests.get('{}/api/2.0/recording?cause[]=motionRecording&startTime={}&sortBy=startTime&sort=asc&apiKey={}'
                         .format(cfg['unifi']['host'], startDate, cfg['unifi']['apiKey']))
 
-    startDate = int(round(time.time() * 1000))
+   startDate = int(round(time.time() * 1000))
+
+    if resp.status_code != 200:
+        print ('Unifi Video API ERROR {}: {}'.format(resp.status_code, resp.text))
+        continue
 
     recordings = resp.json()['data']
+    print ('{} new motion recordings at Unifi Video'.format(recordings.__len__()))
 
     for inProgressRecording in inProgressRecordings:
         # re-fetch item from NVR to check status
@@ -434,6 +439,7 @@ while True:
                                                                            recording['meta']['cameraName']))
 
         if os.stat(videoFile[0]).st_size < 1000:
+            print ('Something is wrong with {}'.format(recording['_id']))
             continue
 
         filename, file_extension = os.path.splitext(os.path.basename(videoFile[0]))
