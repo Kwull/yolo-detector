@@ -397,7 +397,7 @@ while True:
     resp = requests.get('{}/api/2.0/recording?cause[]=motionRecording&startTime={}&sortBy=startTime&sort=asc&apiKey={}'
                         .format(cfg['unifi']['host'], startDate, cfg['unifi']['apiKey']))
 
-   startDate = int(round(time.time() * 1000))
+    startDate = int(round(time.time() * 1000))
 
     if resp.status_code != 200:
         print ('Unifi Video API ERROR {}: {}'.format(resp.status_code, resp.text))
