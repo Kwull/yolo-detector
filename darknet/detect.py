@@ -386,7 +386,8 @@ mqttClient.loop_start()
 print 'Initialized and waiting for motion...'
 
 inProgressRecordings = []
-startDate = int(round(time.time() * 1000))
+#startDate = int(round(time.time() * 1000))
+startDate = (int(time.time()) - 1) * 1000
 
 timeZone = 'Europe/Minsk'  # TODO: get from unifi server
 pst = pytz.timezone(timeZone)
@@ -397,7 +398,11 @@ while True:
     resp = requests.get('{}/api/2.0/recording?cause[]=motionRecording&startTime={}&sortBy=startTime&sort=asc&apiKey={}'
                         .format(cfg['unifi']['host'], startDate, cfg['unifi']['apiKey']))
 
-    startDate = int(round(time.time() * 1000))
+    print ('{} - requesting new motion videos, startTime={}'.format(pytz.utc.localize(datetime.datetime.fromtimestamp(startDate / 1000)) \
+        .astimezone(pst).strftime('%Y-%m-%d %H:%M:%S'), startDate))
+
+    #startDate = int(round(time.time() * 1000))
+    startDate = (int(time.time()) - 1) * 1000
 
     if resp.status_code != 200:
         print ('Unifi Video API ERROR {}: {}'.format(resp.status_code, resp.text))
