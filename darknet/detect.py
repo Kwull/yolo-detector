@@ -157,10 +157,10 @@ def classify(net, meta, im):
     res = []
     for i in range(meta.classes):
         if altNames is None:
-            nameTag = meta.names[i]
+            name_tag = meta.names[i]
         else:
-            nameTag = altNames[i]
-        res.append((nameTag, out[i]))
+            name_tag = altNames[i]
+        res.append((name_tag, out[i]))
     res = sorted(res, key=lambda x: -x[1])
     return res
 
@@ -187,36 +187,37 @@ def detect(net, meta, image, thresh=.5, hier_thresh=.5, nms=.45):
             if dets[j].prob[i] > 0:
                 b = dets[j].bbox
                 if altNames is None:
-                    nameTag = meta.names[i]
+                    name_tag = meta.names[i]
                 else:
-                    nameTag = altNames[i]
-                res.append((nameTag, dets[j].prob[i], (b.x, b.y, b.w, b.h)))
+                    name_tag = altNames[i]
+                res.append((name_tag, dets[j].prob[i], (b.x, b.y, b.w, b.h)))
     res = sorted(res, key=lambda x: -x[1])
     # free_image(im)
     free_detections(dets, num)
     return res
 
 
-def initYolo(configPath ="./cfg/yolov3.cfg", weightPath ="yolov3.weights", metaPath="./cfg/coco.data"):
-    global metaMain, netMain, altNames #pylint: disable=W0603
-    if not os.path.exists(configPath):
-        raise ValueError("Invalid config path `"+os.path.abspath(configPath)+"`")
-    if not os.path.exists(weightPath):
-        raise ValueError("Invalid weight path `"+os.path.abspath(weightPath)+"`")
-    if not os.path.exists(metaPath):
-        raise ValueError("Invalid data file path `"+os.path.abspath(metaPath)+"`")
+def init_yolo(config_path ="./cfg/yolov3.cfg", weight_path ="yolov3.weights", meta_path="./cfg/coco.data"):
+    global metaMain, netMain, altNames
+
+    if not os.path.exists(config_path):
+        raise ValueError("Invalid config path `" + os.path.abspath(config_path) + "`")
+    if not os.path.exists(weight_path):
+        raise ValueError("Invalid weight path `" + os.path.abspath(weight_path) + "`")
+    if not os.path.exists(meta_path):
+        raise ValueError("Invalid data file path `" + os.path.abspath(meta_path) + "`")
     if netMain is None:
-        netMain = load_net_custom(configPath.encode("ascii"), weightPath.encode("ascii"), 0, 1)  # batch size = 1
+        netMain = load_net_custom(config_path.encode("ascii"), weight_path.encode("ascii"), 0, 1)  # batch size = 1
     if metaMain is None:
-        metaMain = load_meta(metaPath.encode("ascii"))
+        metaMain = load_meta(meta_path.encode("ascii"))
     if altNames is None:
         # In Python 3, the metafile default access craps out on Windows (but not Linux)
         # Read the names file and create a list to feed to detect
         try:
-            with open(metaPath) as metaFH:
-                metaContents = metaFH.read()
+            with open(meta_path) as metaFH:
+                meta_contents = metaFH.read()
                 import re
-                match = re.search("names *= *(.*)$", metaContents, re.IGNORECASE | re.MULTILINE)
+                match = re.search("names *= *(.*)$", meta_contents, re.IGNORECASE | re.MULTILINE)
                 if match:
                     result = match.group(1)
                 else:
@@ -224,27 +225,27 @@ def initYolo(configPath ="./cfg/yolov3.cfg", weightPath ="yolov3.weights", metaP
                 try:
                     if os.path.exists(result):
                         with open(result) as namesFH:
-                            namesList = namesFH.read().strip().split("\n")
-                            altNames = [x.strip() for x in namesList]
+                            names_list = namesFH.read().strip().split("\n")
+                            altNames = [x.strip() for x in names_list]
                 except TypeError:
                     pass
         except Exception:
             pass
 
 
-def performDetect(videoPath="test.mp4", taggedVideo="test.avi", thresh=0.25, storeTaggedVideo=False, storeKeyDetectionImages=False):
-    global everyFrame  # pylint: disable=W0603
+def perform_detect(video_path="test.mp4", tagged_video="test.avi", thresh=0.25, store_tagged_video=False,
+                   store_key_detection_images=False):
     assert 0 < thresh < 1, "Threshold should be a float between zero and one (non-inclusive)"
 
-    if not os.path.exists(videoPath):
-        raise ValueError("Invalid image path `" + os.path.abspath(videoPath) + "`")
+    if not os.path.exists(video_path):
+        raise ValueError("Invalid image path `" + os.path.abspath(video_path) + "`")
 
-    video = cv2.VideoCapture(videoPath)
+    video = cv2.VideoCapture(video_path)
     _, frame = video.read()
     height, width, _ = frame.shape
     fps = round(video.get(cv2.CAP_PROP_FPS))
 
-    if storeTaggedVideo:
+    if store_tagged_video:
         if os.name == "nt":
             fourcc = cv2.VideoWriter_fourcc(*'XVID')
         else:
@@ -253,141 +254,145 @@ def performDetect(videoPath="test.mp4", taggedVideo="test.avi", thresh=0.25, sto
         # fourcc = cv2.VideoWriter_fourcc(*'MP4V')
         # fourcc = cv2.VideoWriter_fourcc(*'MP42')
 
-        videoWriter = cv2.VideoWriter(taggedVideo, fourcc, fps, (width, height))
+        video_writer = cv2.VideoWriter(tagged_video, fourcc, fps, (width, height))
 
-    tags = {} # resulted tags - maybe depricated soon
-    objects = [] # resulted objects - tag + coordinates + image only for highest percentage
+    tags = {}  # resulted tags - maybe depricated soon
+    objects = []  # resulted objects - tag + coordinates + image only for highest percentage
 
-    currentFps = 0
-    currentFrame = 0
+    current_fps = 0
+    current_frame = 0
     detections = ()
 
     while video.isOpened():
-        currentFrame = currentFrame + 1
-        currentFps = currentFps + 1
-        if currentFrame > cfg['yolo']['tagEveryFrame']:
-            shouldDetect = True
-            currentFrame = 0
+        current_frame = current_frame + 1
+        current_fps = current_fps + 1
+        if current_frame > cfg['yolo']['tagEveryFrame']:
+            should_detect = True
+            current_frame = 0
         else:
-            shouldDetect = False
+            should_detect = False
 
         _, frame = video.read()
         if frame is None:
             break
 
-        if shouldDetect:
+        if should_detect:
             detections = detect(netMain, metaMain, frame, thresh)
             for detection in detections:
-                if (detection[0] not in tags) or (tags[detection[0]] < detection[1]):
-                    tags[detection[0]] = np.rint(100 * detection[1])
+                label = detection[0]
+                confidence = np.rint(100 * detection[1])
+
+                if (label not in tags) or (tags[label] < confidence):
+                    tags[label] = confidence
 
         try:
             image = frame
 
-            if shouldDetect:
-                imcaption = []
+            if should_detect:
+                image_caption = []
                 for detection in detections:
                     label = detection[0]
-                    confidence = detection[1]
-                    pstring = label + ": " + str(np.rint(100 * confidence)) + "%"
-                    imcaption.append(pstring)
-                    # print(pstring)
+                    confidence = np.rint(100 * detection[1])
+
+                    pstring = label + ": " + str(confidence) + "%"
+                    image_caption.append(pstring)
+
                     bounds = detection[2]
                     shape = image.shape
-                    yExtent = int(bounds[3])
-                    xEntent = int(bounds[2])
+                    y_extent = int(bounds[3])
+                    x_entent = int(bounds[2])
                     # Coordinates are around the center
-                    xCoord = int(bounds[0] - bounds[2] / 2)
-                    yCoord = int(bounds[1] - bounds[3] / 2)
-                    boundingBox = [
-                        [xCoord, yCoord],
-                        [xCoord, yCoord + yExtent],
-                        [xCoord + xEntent, yCoord + yExtent],
-                        [xCoord + xEntent, yCoord]
+                    x_coord = int(bounds[0] - bounds[2] / 2)
+                    y_coord = int(bounds[1] - bounds[3] / 2)
+                    bounding_box = [
+                        [x_coord, y_coord],
+                        [x_coord, y_coord + y_extent],
+                        [x_coord + x_entent, y_coord + y_extent],
+                        [x_coord + x_entent, y_coord]
                     ]
 
-                    imageUrl = taggedVideo.replace(".avi", "-"+detection[0]+".jpg")
+                    image_url = tagged_video.replace(".avi", "-" + label + ".jpg")
 
                     tracked = {
-                        "probability": np.rint(100 * detection[1]),
-                        "frame": currentFps,
-                        "x": xCoord,
-                        "y": yCoord,
-                        "x2": xCoord + xEntent,
-                        "y2": yCoord + yExtent
+                        "confidence": confidence,
+                        "frame": current_fps,
+                        "x": x_coord,
+                        "y": y_coord,
+                        "x2": x_coord + x_entent,
+                        "y2": y_coord + y_extent
                         }
 
-                    objIsFound = False
-                    isBestProbability = False
+                    obj_is_found = False
+                    is_best_confidence = False
                     for obj in objects:
-                        if (obj["name"] == detection[0]): 
-                            objIsFound = True
+                        if obj["name"] == label:
+                            obj_is_found = True
                             obj["tracked"].append(tracked)
-                            if (obj["probability"] < detection[1]):
-                                isBestProbability = True
-                                obj["probability"] = np.rint(100 * detection[1])
-                                         
-                    if (not objIsFound):
-                        isBestProbability = True
+                            if obj["confidence"] < confidence:
+                                is_best_confidence = True
+                                obj["confidence"] = confidence
+
+                    if not obj_is_found:
+                        is_best_confidence = True
                         objects.append({
-                            "name": detection[0],
-                            "probability": np.rint(100 * detection[1]),
+                            "name": label,
+                            "confidence": confidence,
                             "tracked": [tracked],
-                            "image": imageUrl,
+                            "image": image_url,
                             "fps": fps
                         })
 
-                    if (storeTaggedVideo or storeKeyDetectionImages):
+                    if store_tagged_video or store_key_detection_images:
                         # Wiggle it around to make a 3px border
-                        rr, cc = draw.polygon_perimeter([x[1] for x in boundingBox], [x[0] for x in boundingBox],
-                                                        shape=shape)
-                        rr2, cc2 = draw.polygon_perimeter([x[1] + 1 for x in boundingBox], [x[0] for x in boundingBox],
-                                                        shape=shape)
-                        rr3, cc3 = draw.polygon_perimeter([x[1] - 1 for x in boundingBox], [x[0] for x in boundingBox],
-                                                        shape=shape)
-                        rr4, cc4 = draw.polygon_perimeter([x[1] for x in boundingBox], [x[0] + 1 for x in boundingBox],
-                                                        shape=shape)
-                        rr5, cc5 = draw.polygon_perimeter([x[1] for x in boundingBox], [x[0] - 1 for x in boundingBox],
-                                                        shape=shape)
-                        boxColor = (int(255 * (1 - (confidence ** 2))), int(255 * (confidence ** 2)), 0)
-                        draw.set_color(image, (rr, cc), boxColor, alpha=0.8)
-                        draw.set_color(image, (rr2, cc2), boxColor, alpha=0.8)
-                        draw.set_color(image, (rr3, cc3), boxColor, alpha=0.8)
-                        draw.set_color(image, (rr4, cc4), boxColor, alpha=0.8)
-                        draw.set_color(image, (rr5, cc5), boxColor, alpha=0.8)
-                        cv2.putText(image, pstring, (xCoord, yCoord - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.7, boxColor, 2,
+                        rr, cc = draw.polygon_perimeter([x[1] for x in bounding_box], [x[0] for x in bounding_box]
+                                                        , shape=shape)
+                        rr2, cc2 = draw.polygon_perimeter([x[1] + 1 for x in bounding_box], [x[0] for x in bounding_box]
+                                                          , shape=shape)
+                        rr3, cc3 = draw.polygon_perimeter([x[1] - 1 for x in bounding_box], [x[0] for x in bounding_box]
+                                                          , shape=shape)
+                        rr4, cc4 = draw.polygon_perimeter([x[1] for x in bounding_box], [x[0] + 1 for x in bounding_box]
+                                                          , shape=shape)
+                        rr5, cc5 = draw.polygon_perimeter([x[1] for x in bounding_box], [x[0] - 1 for x in bounding_box]
+                                                          , shape=shape)
+                        box_color = (int(255 * (1 - (confidence ** 2))), int(255 * (confidence ** 2)), 0)
+                        draw.set_color(image, (rr, cc), box_color, alpha=0.8)
+                        draw.set_color(image, (rr2, cc2), box_color, alpha=0.8)
+                        draw.set_color(image, (rr3, cc3), box_color, alpha=0.8)
+                        draw.set_color(image, (rr4, cc4), box_color, alpha=0.8)
+                        draw.set_color(image, (rr5, cc5), box_color, alpha=0.8)
+                        cv2.putText(image, pstring, (x_coord, y_coord - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.7, box_color, 2,
                                     cv2.LINE_AA)
 
-                    if (storeKeyDetectionImages and isBestProbability):
-                        cv2.imwrite(imageUrl, image)
+                    if store_key_detection_images and is_best_confidence:
+                        cv2.imwrite(image_url, image)
 
-            if (storeTaggedVideo):
-                videoWriter.write(image)
+            if store_tagged_video:
+                video_writer.write(image)
 
         except Exception as e:
             print("Video processing error: " + str(e))
 
-    if storeTaggedVideo:
-        videoWriter.release()
+    if store_tagged_video:
+        video_writer.release()
     video.release()
     return tags, objects
 
 # Real work started here
 
+
 print 'Initializing yolo...'
-initYolo(cfg['yolo']['configPath'], cfg['yolo']['weightPath'], cfg['yolo']['metaPath'])
+init_yolo(cfg['yolo']['configPath'], cfg['yolo']['weightPath'], cfg['yolo']['metaPath'])
 
 print 'Connecting to mqtt broker...'
-mqttClient = paho.Client('yolo')
-mqttClient.username_pw_set(cfg['mqtt']['user'], cfg['mqtt']['password'])
-mqttClient.connect(cfg['mqtt']['broker'], cfg['mqtt']['port'])
-mqttClient.loop_start()
+mqtt_client = paho.Client('yolo')
+mqtt_client.username_pw_set(cfg['mqtt']['user'], cfg['mqtt']['password'])
+mqtt_client.connect(cfg['mqtt']['broker'], cfg['mqtt']['port'])
+mqtt_client.loop_start()
 
 print 'Initialized and waiting for motion...'
 
-inProgressRecordings = []
-#startDate = int(round(time.time() * 1000))
-startDate = (int(time.time()) - 1) * 1000
+in_progress_recordings = []
+start_date = (int(time.time()) - 1) * 1000
 
 timeZone = 'Europe/Minsk'  # TODO: get from unifi server
 pst = pytz.timezone(timeZone)
@@ -396,13 +401,13 @@ while True:
     time.sleep(cfg['unifi']['nvrScanInterval'])
 
     resp = requests.get('{}/api/2.0/recording?cause[]=motionRecording&startTime={}&sortBy=startTime&sort=asc&apiKey={}'
-                        .format(cfg['unifi']['host'], startDate, cfg['unifi']['apiKey']))
+                        .format(cfg['unifi']['host'], start_date, cfg['unifi']['apiKey']))
 
-    print ('{} - requesting new motion videos, startTime={}'.format(pytz.utc.localize(datetime.datetime.fromtimestamp(startDate / 1000)) \
-        .astimezone(pst).strftime('%Y-%m-%d %H:%M:%S'), startDate))
+    print ('{} - requesting new motion videos, startTime={}'
+           .format(pytz.utc.localize(datetime.datetime.fromtimestamp(start_date / 1000))
+                   .astimezone(pst).strftime('%Y-%m-%d %H:%M:%S'), start_date))
 
-    #startDate = int(round(time.time() * 1000))
-    startDate = (int(time.time()) - 1) * 1000
+    start_date = (int(time.time()) - 1) * 1000
 
     if resp.status_code != 200:
         print ('Unifi Video API ERROR {}: {}'.format(resp.status_code, resp.text))
@@ -411,74 +416,77 @@ while True:
     recordings = resp.json()['data']
     print ('{} new motion recordings at Unifi Video'.format(recordings.__len__()))
 
-    for inProgressRecording in inProgressRecordings:
+    for in_progress_recording in in_progress_recordings:
         # re-fetch item from NVR to check status
         resp2 = requests.get('{}/api/2.0/recording/{}?apiKey={}'.format(cfg['unifi']['host'],
-                                                                        inProgressRecording, cfg['unifi']['apiKey']))
+                                                                        in_progress_recording, cfg['unifi']['apiKey']))
         # todo - speed up by requesting all recordings by IDs
-        updatedRecording = resp2.json()['data'][0]
+        updated_recording = resp2.json()['data'][0]
 
-        if not updatedRecording['inProgress']:
-            recordings.insert(1, updatedRecording)
-            inProgressRecordings.remove(inProgressRecording)
+        if not updated_recording['inProgress']:
+            recordings.insert(1, updated_recording)
+            in_progress_recordings.remove(in_progress_recording)
 
     for recording in recordings:
-        recordingTime = pytz.utc.localize(datetime.datetime.fromtimestamp(recording['startTime']/1000))\
+        recording_time = pytz.utc.localize(datetime.datetime.fromtimestamp(recording['startTime'] / 1000))\
             .astimezone(pst).strftime('%Y-%m-%d %H:%M:%S')
-        recordingStopTime = pytz.utc.localize(datetime.datetime.fromtimestamp(recording['endTime']/1000))\
+        recording_stop_time = pytz.utc.localize(datetime.datetime.fromtimestamp(recording['endTime'] / 1000))\
             .astimezone(pst).strftime('%Y-%m-%d %H:%M:%S')
 
-        print('{}: {} {} inProgress={}'.format(recordingTime, recording['meta']['cameraName'],
+        print('{}: {} {} inProgress={}'.format(recording_time, recording['meta']['cameraName'],
                                                recording['_id'], recording['inProgress']))
 
         if recording['inProgress']:
-            inProgressRecordings.append(recording['_id'])
+            in_progress_recordings.append(recording['_id'])
             print 'Skipping inProgress recording for now'
             continue
 
-        recordingUrl = '{}/api/2.0/recording/{}/download?apiKey={}'.format(cfg['unifi']['host'],
-                                                                           recording['_id'], cfg['unifi']['apiKey'])
+        recording_url = '{}/api/2.0/recording/{}/download?apiKey={}'.format(cfg['unifi']['host'],
+                                                                            recording['_id'], cfg['unifi']['apiKey'])
 
-        videoFile = urllib.urlretrieve(recordingUrl, '{}/{}-{}.mp4'.format(cfg['yolo']['motionFolder'],
-                                                                           recording['_id'],
-                                                                           recording['meta']['cameraName']))
+        video_file = urllib.urlretrieve(recording_url, '{}/{}-{}.mp4'.format(cfg['yolo']['motionFolder'],
+                                                                             recording['_id'],
+                                                                             recording['meta']['cameraName']))
 
-        if os.stat(videoFile[0]).st_size < 1000:
+        if os.stat(video_file[0]).st_size < 1000:
             print ('Something is wrong with {}'.format(recording['_id']))
             continue
 
-        filename, file_extension = os.path.splitext(os.path.basename(videoFile[0]))
-        datePart = pytz.utc.localize(datetime.datetime.fromtimestamp(recording['startTime']/1000)).astimezone(pst).strftime('%Y/%m/%d')
-        path = cfg['yolo']['processedFolder'] + '/' + datePart
-        taggedVideo = path +'/' + filename + '.avi'
+        filename, file_extension = os.path.splitext(os.path.basename(video_file[0]))
+        date_part = pytz.utc.localize(datetime.datetime.fromtimestamp(recording['startTime'] / 1000))\
+            .astimezone(pst).strftime('%Y/%m/%d')
 
-        if ((cfg['yolo']['storeTaggedVideo'] or cfg['yolo']['storeKeyDetectionImages']) and not os.path.exists(path)):
+        path = cfg['yolo']['processedFolder'] + '/' + date_part
+        tagged_video = path + '/' + filename + '.avi'
+
+        if (cfg['yolo']['storeTaggedVideo'] or cfg['yolo']['storeKeyDetectionImages']) and not os.path.exists(path):
             os.makedirs(path)
 
-        tags, objects = performDetect(videoFile[0], taggedVideo, cfg['yolo']['threshold'], cfg['yolo']['storeTaggedVideo'], cfg['yolo']['storeKeyDetectionImages'])
+        tags, objects = perform_detect(video_file[0], tagged_video, cfg['yolo']['threshold'],
+                                       cfg['yolo']['storeTaggedVideo'], cfg['yolo']['storeKeyDetectionImages'])
 
         detections = {
-            'startTime': recordingTime,
-            'endTime': recordingStopTime,
+            'startTime': recording_time,
+            'endTime': recording_stop_time,
             'camera': recording['meta']['cameraName'],
             'recordingId': recording['_id'],
-            'recordingUrl': recordingUrl,
+            'recordingUrl': recording_url,
             'tags': tags,
-            "objects": objects
+            'objects': objects
         }
 
         if cfg['yolo']['storeTaggedVideo']:
-            detections['taggedVideo'] = taggedVideo
+            detections['taggedVideo'] = tagged_video
 
-        if os.path.exists(videoFile[0]):
-            os.remove(videoFile[0])
+        if os.path.exists(video_file[0]):
+            os.remove(video_file[0])
 
-        jsonData = json.dumps(detections, indent=4, sort_keys=True)
+        json_data = json.dumps(detections, indent=4, sort_keys=True)
 
         if len(detections['tags']) != 0:
-            mqttTopic = cfg['mqtt']['rootTopic']+'/'+recording['meta']['cameraName'].lower()
-            mqttClient.publish(mqttTopic, jsonData)
-            print detections['recordingId'] + ' is published to mqtt ' + mqttTopic 
+            mqtt_topic = cfg['mqtt']['rootTopic'] + '/' + recording['meta']['cameraName'].lower()
+            mqtt_client.publish(mqtt_topic, json_data)
+            print detections['recordingId'] + ' is published to mqtt ' + mqtt_topic
         else:    
             print detections['recordingId'] + ' nothing detected'
         # print(jsonData)
