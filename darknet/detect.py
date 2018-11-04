@@ -396,18 +396,22 @@ in_progress_recordings = []
 timeZone = 'Europe/Minsk'  # TODO: get from unifi server
 pst = pytz.timezone(timeZone)
 
+start_date = int(time.time()) * 1000
+end_date = int(time.time()) * 1000
+
 while True:
-    start_date = (int(time.time()) - 1) * 1000
     time.sleep(cfg['unifi']['nvrScanInterval'])
+    start_date = end_date
+    end_date = int(time.time()) * 1000
 
-    resp = requests.get('{}/api/2.0/recording?cause[]=motionRecording&startTime={}&sortBy=startTime&sort=asc&apiKey={}'
-                        .format(cfg['unifi']['host'], start_date, cfg['unifi']['apiKey']))
+    resp = requests.get('{}/api/2.0/recording?cause[]=motionRecording&startTime={}&endTime={}&sortBy=startTime&sort=asc&apiKey={}'
+                        .format(cfg['unifi']['host'], start_date, end_date, cfg['unifi']['apiKey']))
 
-    print ('{} - requesting new motion videos, startTime={}'
+    print ('{}/{} - requesting new motion videos - {}/{}'
            .format(pytz.utc.localize(datetime.datetime.fromtimestamp(start_date / 1000))
-                   .astimezone(pst).strftime('%Y-%m-%d %H:%M:%S'), start_date))
-
-    # start_date = (int(time.time()) - 1) * 1000
+                   .astimezone(pst).strftime('%Y-%m-%d %H:%M:%S'), start_date,
+                   pytz.utc.localize(datetime.datetime.fromtimestamp(end_date / 1000))
+                   .astimezone(pst).strftime('%Y-%m-%d %H:%M:%S'), end_date))
 
     if resp.status_code != 200:
         print ('Unifi Video API ERROR {}: {}'.format(resp.status_code, resp.text))
