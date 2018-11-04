@@ -12,6 +12,10 @@ import datetime
 import paho.mqtt.client as paho
 import yaml
 import pytz
+import re
+import subprocess
+import select
+
 
 with open("/config/detect.conf", 'r') as ymlfile:
     cfg = yaml.load(ymlfile)
@@ -396,102 +400,78 @@ in_progress_recordings = []
 timeZone = 'Europe/Minsk'  # TODO: get from unifi server
 pst = pytz.timezone(timeZone)
 
-start_date = int(time.time()) * 1000
-end_date = int(time.time()) * 1000
+
+motion_recorded = re.compile(r"STOPPING REC motionRecording:(\S+)")
+
+f = subprocess.Popen(['tail', '-F', cfg['unifi']['recordingLog']], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+p = select.poll()
+p.register(f.stdout)
 
 while True:
-    time.sleep(cfg['unifi']['nvrScanInterval'])
-    start_date = end_date
-    end_date = int(time.time()) * 1000
+    if p.poll(1):
+        line = f.stdout.readline().strip()
+        match = motion_recorded.search(line)
+        if match is not None:
+            rec_id = match.group(1)
+            # print ('{} new motion recording detected: {}'.format(rec_id, line))
 
-    resp = requests.get('{}/api/2.0/recording?cause[]=motionRecording&startTime={}&endTime={}&sortBy=startTime&sort=asc&apiKey={}'
-                        .format(cfg['unifi']['host'], start_date, end_date, cfg['unifi']['apiKey']))
+            resp = requests.get('{}/api/2.0/recording/{}?apiKey={}'.format(cfg['unifi']['host'], rec_id,
+                                                                            cfg['unifi']['apiKey']))
+            recording = resp.json()['data'][0]
+            recording_time = pytz.utc.localize(datetime.datetime.fromtimestamp(recording['startTime'] / 1000))\
+                .astimezone(pst).strftime('%Y-%m-%d %H:%M:%S')
+            recording_stop_time = pytz.utc.localize(datetime.datetime.fromtimestamp(recording['endTime'] / 1000))\
+                .astimezone(pst).strftime('%Y-%m-%d %H:%M:%S')
 
-    print ('{}/{} - requesting new motion videos - {}/{}'
-           .format(pytz.utc.localize(datetime.datetime.fromtimestamp(start_date / 1000))
-                   .astimezone(pst).strftime('%Y-%m-%d %H:%M:%S'), start_date,
-                   pytz.utc.localize(datetime.datetime.fromtimestamp(end_date / 1000))
-                   .astimezone(pst).strftime('%Y-%m-%d %H:%M:%S'), end_date))
+            print('{}: {} {}'.format(recording_time, recording['meta']['cameraName'], recording['_id']))
 
-    if resp.status_code != 200:
-        print ('Unifi Video API ERROR {}: {}'.format(resp.status_code, resp.text))
-        continue
+            recording_url = '{}/api/2.0/recording/{}/download?apiKey={}'.format(cfg['unifi']['host'],
+                                                                                recording['_id'], cfg['unifi']['apiKey'])
 
-    recordings = resp.json()['data']
-    print ('{} new motion recordings at Unifi Video'.format(recordings.__len__()))
+            video_file = urllib.urlretrieve(recording_url, '{}/{}-{}.mp4'.format(cfg['yolo']['motionFolder'],
+                                                                                 recording['_id'],
+                                                                                 recording['meta']['cameraName']))
 
-    for in_progress_recording in in_progress_recordings:
-        # re-fetch item from NVR to check status
-        resp2 = requests.get('{}/api/2.0/recording/{}?apiKey={}'.format(cfg['unifi']['host'],
-                                                                        in_progress_recording, cfg['unifi']['apiKey']))
-        # todo - speed up by requesting all recordings by IDs
-        updated_recording = resp2.json()['data'][0]
+            if os.stat(video_file[0]).st_size < 1000:
+                print ('Something is wrong with {}'.format(recording['_id']))
+                continue
 
-        if not updated_recording['inProgress']:
-            recordings.insert(1, updated_recording)
-            in_progress_recordings.remove(in_progress_recording)
+            filename, file_extension = os.path.splitext(os.path.basename(video_file[0]))
+            date_part = pytz.utc.localize(datetime.datetime.fromtimestamp(recording['startTime'] / 1000))\
+                .astimezone(pst).strftime('%Y/%m/%d')
 
-    for recording in recordings:
-        recording_time = pytz.utc.localize(datetime.datetime.fromtimestamp(recording['startTime'] / 1000))\
-            .astimezone(pst).strftime('%Y-%m-%d %H:%M:%S')
-        recording_stop_time = pytz.utc.localize(datetime.datetime.fromtimestamp(recording['endTime'] / 1000))\
-            .astimezone(pst).strftime('%Y-%m-%d %H:%M:%S')
+            path = cfg['yolo']['processedFolder'] + '/' + date_part
+            tagged_video = path + '/' + filename + '.avi'
 
-        print('{}: {} {} inProgress={}'.format(recording_time, recording['meta']['cameraName'],
-                                               recording['_id'], recording['inProgress']))
+            if (cfg['yolo']['storeTaggedVideo'] or cfg['yolo']['storeKeyDetectionImages']) and not os.path.exists(path):
+                os.makedirs(path)
 
-        if recording['inProgress']:
-            in_progress_recordings.append(recording['_id'])
-            print 'Skipping inProgress recording for now'
-            continue
+            tags, objects = perform_detect(video_file[0], tagged_video, cfg['yolo']['threshold'],
+                                           cfg['yolo']['storeTaggedVideo'], cfg['yolo']['storeKeyDetectionImages'])
 
-        recording_url = '{}/api/2.0/recording/{}/download?apiKey={}'.format(cfg['unifi']['host'],
-                                                                            recording['_id'], cfg['unifi']['apiKey'])
+            detections = {
+                'startTime': recording_time,
+                'endTime': recording_stop_time,
+                'camera': recording['meta']['cameraName'],
+                'recordingId': recording['_id'],
+                'recordingUrl': recording_url,
+                'tags': tags,
+                'objects': objects
+            }
 
-        video_file = urllib.urlretrieve(recording_url, '{}/{}-{}.mp4'.format(cfg['yolo']['motionFolder'],
-                                                                             recording['_id'],
-                                                                             recording['meta']['cameraName']))
+            if cfg['yolo']['storeTaggedVideo']:
+                detections['taggedVideo'] = tagged_video
 
-        if os.stat(video_file[0]).st_size < 1000:
-            print ('Something is wrong with {}'.format(recording['_id']))
-            continue
+            if os.path.exists(video_file[0]):
+                os.remove(video_file[0])
 
-        filename, file_extension = os.path.splitext(os.path.basename(video_file[0]))
-        date_part = pytz.utc.localize(datetime.datetime.fromtimestamp(recording['startTime'] / 1000))\
-            .astimezone(pst).strftime('%Y/%m/%d')
+            json_data = json.dumps(detections, indent=4, sort_keys=True)
 
-        path = cfg['yolo']['processedFolder'] + '/' + date_part
-        tagged_video = path + '/' + filename + '.avi'
+            if len(detections['tags']) != 0:
+                mqtt_topic = cfg['mqtt']['rootTopic'] + '/' + recording['meta']['cameraName'].lower()
+                mqtt_client.publish(mqtt_topic, json_data)
+                print detections['recordingId'] + ' is published to mqtt ' + mqtt_topic
+            else:
+                print detections['recordingId'] + ' nothing detected'
 
-        if (cfg['yolo']['storeTaggedVideo'] or cfg['yolo']['storeKeyDetectionImages']) and not os.path.exists(path):
-            os.makedirs(path)
-
-        tags, objects = perform_detect(video_file[0], tagged_video, cfg['yolo']['threshold'],
-                                       cfg['yolo']['storeTaggedVideo'], cfg['yolo']['storeKeyDetectionImages'])
-
-        detections = {
-            'startTime': recording_time,
-            'endTime': recording_stop_time,
-            'camera': recording['meta']['cameraName'],
-            'recordingId': recording['_id'],
-            'recordingUrl': recording_url,
-            'tags': tags,
-            'objects': objects
-        }
-
-        if cfg['yolo']['storeTaggedVideo']:
-            detections['taggedVideo'] = tagged_video
-
-        if os.path.exists(video_file[0]):
-            os.remove(video_file[0])
-
-        json_data = json.dumps(detections, indent=4, sort_keys=True)
-
-        if len(detections['tags']) != 0:
-            mqtt_topic = cfg['mqtt']['rootTopic'] + '/' + recording['meta']['cameraName'].lower()
-            mqtt_client.publish(mqtt_topic, json_data)
-            print detections['recordingId'] + ' is published to mqtt ' + mqtt_topic
-        else:    
-            print detections['recordingId'] + ' nothing detected'
-        # print(jsonData)
-
+        time.sleep(1)
