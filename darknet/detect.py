@@ -404,6 +404,7 @@ pst = pytz.timezone(timeZone)
 motion_recorded = re.compile(r"STOPPING REC motionRecording:(\S+)")
 
 f = subprocess.Popen(['tail', '-F', cfg['unifi']['recordingLog']], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
 p = select.poll()
 p.register(f.stdout)
 
@@ -474,4 +475,5 @@ while True:
             else:
                 print detections['recordingId'] + ' nothing detected'
 
+    else:
         time.sleep(1)
